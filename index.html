@@ -16,6 +16,9 @@
     <!-- Biblioteca html5-qrcode via CDN -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
 
+    <!-- Biblioteca SheetJS (XLSX) para exportação real de planilhas Excel (.xlsx) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" type="text/javascript"></script>
+
     <script>
         tailwind.config = {
             theme: {
@@ -110,27 +113,67 @@
 
         <!-- Seção 1: Configuração Rápida Pré-Leitura & Scanner -->
         <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">Configuração Padrão para Próxima Leitura</h2>
+            <div class="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70 space-y-4">
                 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <!-- Tipo de Equipamento -->
-                    <div>
-                        <label for="defaultEquipmentType" class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipamento</label>
-                        <div class="flex flex-wrap gap-1.5" id="quickTypeButtons">
-                            <button type="button" data-type="Monitor" class="type-chip active bg-blue-600 text-white border-blue-600 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Monitor</button>
-                            <button type="button" data-type="CPU / Desktop" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">CPU</button>
-                            <button type="button" data-type="Notebook" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Notebook</button>
-                            <button type="button" data-type="Periférico" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Periférico</button>
-                        </div>
-                        <input type="text" id="defaultEquipmentType" value="Monitor" placeholder="Ou digite outro tipo..." class="mt-2 w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                <!-- Seletor Principal de Modo de Leitura: Patrimônio vs S/N -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">1. O que você vai ler agora?</h2>
+                        <span id="scanModeHint" class="text-[11px] font-semibold text-blue-600">Cria novo item com Patrimônio</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button type="button" id="btnModePatrimonio" class="mode-toggle-btn flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm border-2 border-blue-600 bg-blue-600 text-white shadow-sm transition cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            <span>Patrimônio</span>
+                        </button>
+
+                        <button type="button" id="btnModeSN" class="mode-toggle-btn flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                            </svg>
+                            <span>S/N (Série)</span>
+                        </button>
                     </div>
 
-                    <!-- Localização / Observação Fixa -->
-                    <div>
-                        <label for="defaultLocation" class="block text-xs font-semibold text-slate-700 mb-1">Localização / Modelo / Obs. (Opcional)</label>
-                        <input type="text" id="defaultLocation" placeholder="Ex: Sala TI, Dell 24', Bancada 2..." class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
-                        <p class="text-[11px] text-slate-500 mt-1.5">Este texto será preenchido automaticamente em cada leitura para agilizar lotes no mesmo setor.</p>
+                    <!-- Sub-opção quando S/N está selecionado: Vincular ao último item ou Criar novo sem patrimônio -->
+                    <div id="snTargetOptions" class="hidden mt-2.5 p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-2">
+                        <p class="text-xs font-bold text-indigo-900">Destino da leitura do S/N:</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <label class="flex items-center gap-2 p-2 bg-white rounded-lg border border-indigo-200 cursor-pointer text-xs font-semibold text-slate-700">
+                                <input type="radio" name="snBehavior" value="new_without_pat" checked class="text-indigo-600 focus:ring-indigo-500">
+                                <span>Novo item (Sem Patrimônio)</span>
+                            </label>
+                            <label id="labelLinkLastItem" class="flex items-center gap-2 p-2 bg-white rounded-lg border border-indigo-200 cursor-pointer text-xs font-semibold text-slate-700">
+                                <input type="radio" name="snBehavior" value="link_last" class="text-indigo-600 focus:ring-indigo-500">
+                                <span id="linkLastItemText" class="truncate">Vincular ao último item</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-200/80 pt-3">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">2. Padrão do Equipamento</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <!-- Tipo de Equipamento -->
+                        <div>
+                            <label for="defaultEquipmentType" class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipamento</label>
+                            <div class="flex flex-wrap gap-1.5" id="quickTypeButtons">
+                                <button type="button" data-type="Monitor" class="type-chip active bg-blue-600 text-white border-blue-600 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Monitor</button>
+                                <button type="button" data-type="CPU / Desktop" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">CPU</button>
+                                <button type="button" data-type="Notebook" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Notebook</button>
+                                <button type="button" data-type="Periférico" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Periférico</button>
+                            </div>
+                            <input type="text" id="defaultEquipmentType" value="Monitor" placeholder="Ou digite outro tipo..." class="mt-2 w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        </div>
+
+                        <!-- Localização / Observação Fixa -->
+                        <div>
+                            <label for="defaultLocation" class="block text-xs font-semibold text-slate-700 mb-1">Localização / Modelo / Obs. (Opcional)</label>
+                            <input type="text" id="defaultLocation" placeholder="Ex: Sala TI, Dell 24', Bancada 2..." class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                            <p class="text-[11px] text-slate-500 mt-1.5">Preenchido automaticamente em cada novo item criado.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -150,9 +193,14 @@
                         </div>
                     </div>
 
+                    <!-- Indicador de Modo Ativo sobre a Câmera -->
+                    <div id="activeCameraModePill" class="hidden absolute bottom-3 left-3 bg-slate-900/85 text-white text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-sm border border-white/15">
+                        Lendo: <span id="activeCameraModeLabel" class="text-blue-400">PATRIMÔNIO</span>
+                    </div>
+
                     <!-- Status de Cooldown / Leitura -->
                     <div id="scanStatusBadge" class="hidden absolute top-3 left-3 right-3 bg-emerald-600/95 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-lg text-center backdrop-blur-sm transition-all">
-                        Código capturado! Aguarde 2s para próxima leitura...
+                        Código capturado! Aguarde 2,5s para próxima leitura...
                     </div>
                 </div>
 
@@ -166,23 +214,30 @@
                         <span>Iniciar Câmera</span>
                     </button>
 
-                    <button id="btnStopCamera" type="button" class="hidden flex-1 sm:flex-none min-w-[150px] flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-semibold py-3 px-5 rounded-xl shadow-sm transition cursor-pointer">
+                    <button id="btnStopCamera" type="button" class="hidden flex-1 sm:flex-none min-w-[140px] flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-semibold py-3 px-4 rounded-xl shadow-sm transition cursor-pointer">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
                         </svg>
-                        <span>Parar Câmera</span>
+                        <span>Parar</span>
                     </button>
 
-                    <button id="btnSwitchCamera" type="button" class="hidden flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 font-semibold py-3 px-4 rounded-xl transition cursor-pointer" title="Alternar câmera traseira/frontal">
+                    <button id="btnTorch" type="button" class="hidden flex items-center justify-center gap-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold py-3 px-3.5 rounded-xl transition cursor-pointer" title="Ligar/Desligar Lanterna">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span class="text-xs sm:text-sm">Lanterna</span>
+                    </button>
+
+                    <button id="btnSwitchCamera" type="button" class="hidden flex items-center justify-center gap-1.5 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 font-semibold py-3 px-3.5 rounded-xl transition cursor-pointer" title="Alternar câmera traseira/frontal">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        <span>Trocar Câmera</span>
+                        <span class="text-xs sm:text-sm">Trocar</span>
                     </button>
 
                     <!-- Botão de Som (Mute/Unmute) -->
-                    <button id="btnToggleSound" type="button" class="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-medium py-3 px-4 rounded-xl transition cursor-pointer" title="Ativar/Desativar Bip Sonoro">
+                    <button id="btnToggleSound" type="button" class="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-medium py-3 px-3.5 rounded-xl transition cursor-pointer" title="Ativar/Desativar Bip Sonoro">
                         <span id="soundIconOn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -202,13 +257,13 @@
                 <div class="pt-3 border-t border-slate-100">
                     <form id="manualEntryForm" class="flex flex-col sm:flex-row gap-2">
                         <div class="relative flex-1">
-                            <input type="text" id="manualCodeInput" placeholder="Etiqueta ilegível? Digite o patrimônio e pressione Enter..." class="w-full pl-3.5 pr-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                            <input type="text" id="manualCodeInput" placeholder="Digitar Patrimônio manualmente e pressionar Enter..." class="w-full pl-3.5 pr-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                         </div>
-                        <button type="submit" class="bg-slate-800 hover:bg-slate-900 active:bg-black text-white font-semibold py-3 px-5 rounded-xl text-sm transition flex items-center justify-center gap-2 cursor-pointer shrink-0">
+                        <button type="submit" id="btnManualSubmit" class="bg-slate-800 hover:bg-slate-900 active:bg-black text-white font-semibold py-3 px-5 rounded-xl text-sm transition flex items-center justify-center gap-2 cursor-pointer shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                             </svg>
-                            <span>Adicionar Manual</span>
+                            <span id="btnManualSubmitText">Adicionar Patrimônio</span>
                         </button>
                     </form>
                 </div>
@@ -233,11 +288,11 @@
                         <span>Copiar Lista</span>
                     </button>
 
-                    <button id="btnExportCsv" type="button" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-2.5 px-3.5 rounded-xl text-xs sm:text-sm shadow-xs transition cursor-pointer">
+                    <button id="btnExportExcel" type="button" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-2.5 px-3.5 rounded-xl text-xs sm:text-sm shadow-xs transition cursor-pointer">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <span>Exportar CSV</span>
+                        <span>Exportar Excel (.xlsx)</span>
                     </button>
 
                     <button id="btnClearList" type="button" class="flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-2.5 px-3 rounded-xl text-xs sm:text-sm transition cursor-pointer" title="Limpar toda a lista">
@@ -255,7 +310,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    <input type="text" id="searchInput" placeholder="Filtrar por patrimônio, tipo ou observação..." class="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <input type="text" id="searchInput" placeholder="Filtrar por patrimônio, S/N, tipo ou observação..." class="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
             </div>
 
@@ -266,11 +321,11 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                     </svg>
                 </div>
-                <h3 class="text-sm font-bold text-slate-700">Nenhum patrimônio lido ainda</h3>
-                <p class="text-xs text-slate-500 mt-1 max-w-xs mx-auto">Inicie a câmera acima e aponte para o código de barras ou QR code da etiqueta do monitor.</p>
+                <h3 class="text-sm font-bold text-slate-700">Nenhum equipamento lido ainda</h3>
+                <p class="text-xs text-slate-500 mt-1 max-w-xs mx-auto">Escolha entre <strong>Patrimônio</strong> ou <strong>S/N</strong>, inicie a câmera e aponte para a etiqueta.</p>
             </div>
 
-            <!-- Lista Responsiva (Cards no Mobile / Tabela no Desktop) -->
+            <!-- Lista Responsiva -->
             <div id="inventoryListContainer" class="divide-y divide-slate-200">
                 <!-- Itens serão injetados via JavaScript -->
             </div>
@@ -295,10 +350,10 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                 </div>
-                <h3 class="text-lg font-bold text-slate-900">Patrimônio Já Lido!</h3>
+                <h3 id="dupModalTitle" class="text-lg font-bold text-slate-900">Código Já Lido!</h3>
             </div>
             <p class="text-sm text-slate-600 leading-relaxed">
-                O código <strong id="dupCodeText" class="text-slate-900 bg-slate-100 px-2 py-0.5 rounded font-mono"></strong> já consta na sua lista de inventário. Deseja adicioná-lo novamente como um registro duplicado?
+                O <span id="dupFieldLabel" class="font-semibold">código</span> <strong id="dupCodeText" class="text-slate-900 bg-slate-100 px-2 py-0.5 rounded font-mono"></strong> já consta na sua lista de inventário. Deseja adicioná-lo novamente como um registro duplicado?
             </p>
             <div class="mt-6 flex flex-col-reverse sm:flex-row gap-2.5 sm:justify-end">
                 <button id="btnDupIgnore" type="button" class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
@@ -342,9 +397,15 @@
             <h3 class="text-lg font-bold text-slate-900 mb-4">Editar Item do Inventário</h3>
             <form id="editItemForm" class="space-y-4">
                 <input type="hidden" id="editItemId">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Número do Patrimônio</label>
-                    <input type="text" id="editItemCode" required class="w-full px-3.5 py-2.5 text-sm font-mono font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Número do Patrimônio</label>
+                        <input type="text" id="editItemPatrimonio" placeholder="Opcional se tiver S/N" class="w-full px-3.5 py-2.5 text-sm font-mono font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Número de Série (S/N)</label>
+                        <input type="text" id="editItemSN" placeholder="Opcional se tiver Patrimônio" class="w-full px-3.5 py-2.5 text-sm font-mono font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipamento</label>
@@ -369,14 +430,15 @@
     <!-- Lógica JavaScript Completa -->
     <script>
         /**
-         * Aplicativo de Inventário de Patrimônio
+         * Aplicativo de Inventário de Patrimônio e Número de Série (S/N)
          * Gerencia leitura de QR Code / Código de Barras via html5-qrcode,
-         * armazenamento local, feedback sonoro/háptico e exportação.
+         * separação entre Patrimônio e S/N, lanterna, armazenamento local e exportação CSV.
          */
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONSTANTES E ESTADO DA APLICAÇÃO ---
-            const STORAGE_KEY = 'inventario_patrimonio_v1';
-            const COOLDOWN_MS = 2500; // 2.5 segundos de intervalo entre leituras automáticas
+            const STORAGE_KEY = 'inventario_patrimonio_v2';
+            const LEGACY_STORAGE_KEY = 'inventario_patrimonio_v1';
+            const COOLDOWN_MS = 2500;
 
             let inventoryItems = [];
             let html5QrCode = null;
@@ -385,8 +447,13 @@
             let currentCameraIndex = 0;
             let isCooldown = false;
             let soundEnabled = true;
-            let pendingDuplicateCode = null;
+            let torchOn = false;
             let audioCtx = null;
+
+            // Modo de leitura atual: 'patrimonio' | 'sn'
+            let currentScanMode = 'patrimonio';
+            // Pendência para modal de duplicidade
+            let pendingDuplicate = null; // { code: string, mode: 'patrimonio' | 'sn', snBehavior: string }
 
             // --- ELEMENTOS DO DOM ---
             const totalCounter = document.getElementById('totalCounter');
@@ -394,11 +461,21 @@
             const defaultEquipmentType = document.getElementById('defaultEquipmentType');
             const defaultLocation = document.getElementById('defaultLocation');
             const quickTypeButtons = document.querySelectorAll('.type-chip');
+
+            // Controles de Modo (Patrimônio vs S/N)
+            const btnModePatrimonio = document.getElementById('btnModePatrimonio');
+            const btnModeSN = document.getElementById('btnModeSN');
+            const scanModeHint = document.getElementById('scanModeHint');
+            const snTargetOptions = document.getElementById('snTargetOptions');
+            const linkLastItemText = document.getElementById('linkLastItemText');
+            const activeCameraModePill = document.getElementById('activeCameraModePill');
+            const activeCameraModeLabel = document.getElementById('activeCameraModeLabel');
             
             const cameraPlaceholder = document.getElementById('cameraPlaceholder');
             const scanStatusBadge = document.getElementById('scanStatusBadge');
             const btnStartCamera = document.getElementById('btnStartCamera');
             const btnStopCamera = document.getElementById('btnStopCamera');
+            const btnTorch = document.getElementById('btnTorch');
             const btnSwitchCamera = document.getElementById('btnSwitchCamera');
             const btnToggleSound = document.getElementById('btnToggleSound');
             const soundIconOn = document.getElementById('soundIconOn');
@@ -407,9 +484,10 @@
 
             const manualEntryForm = document.getElementById('manualEntryForm');
             const manualCodeInput = document.getElementById('manualCodeInput');
+            const btnManualSubmitText = document.getElementById('btnManualSubmitText');
 
             const btnCopyList = document.getElementById('btnCopyList');
-            const btnExportCsv = document.getElementById('btnExportCsv');
+            const btnExportExcel = document.getElementById('btnExportExcel');
             const btnClearList = document.getElementById('btnClearList');
             const searchBarContainer = document.getElementById('searchBarContainer');
             const searchInput = document.getElementById('searchInput');
@@ -419,6 +497,7 @@
 
             // Modais
             const duplicateModal = document.getElementById('duplicateModal');
+            const dupFieldLabel = document.getElementById('dupFieldLabel');
             const dupCodeText = document.getElementById('dupCodeText');
             const btnDupIgnore = document.getElementById('btnDupIgnore');
             const btnDupAddAnyway = document.getElementById('btnDupAddAnyway');
@@ -431,7 +510,8 @@
             const editItemModal = document.getElementById('editItemModal');
             const editItemForm = document.getElementById('editItemForm');
             const editItemId = document.getElementById('editItemId');
-            const editItemCode = document.getElementById('editItemCode');
+            const editItemPatrimonio = document.getElementById('editItemPatrimonio');
+            const editItemSN = document.getElementById('editItemSN');
             const editItemType = document.getElementById('editItemType');
             const editItemNote = document.getElementById('editItemNote');
             const btnCancelEdit = document.getElementById('btnCancelEdit');
@@ -441,7 +521,51 @@
                 httpsWarning.classList.remove('hidden');
             }
 
-            // --- FUNÇÕES DE ÁUDIO (WEB AUDIO API - SEM ARQUIVOS EXTERNOS) ---
+            // --- ALTERNÂNCIA ENTRE MODO PATRIMÔNIO E MODO S/N ---
+            function setScanMode(mode) {
+                currentScanMode = mode;
+
+                if (mode === 'patrimonio') {
+                    btnModePatrimonio.className = 'mode-toggle-btn flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm border-2 border-blue-600 bg-blue-600 text-white shadow-sm transition cursor-pointer';
+                    btnModeSN.className = 'mode-toggle-btn flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition cursor-pointer';
+                    
+                    scanModeHint.textContent = 'Cria novo item com Patrimônio';
+                    scanModeHint.className = 'text-[11px] font-semibold text-blue-600';
+                    snTargetOptions.classList.add('hidden');
+
+                    manualCodeInput.placeholder = 'Digitar Patrimônio manualmente e pressionar Enter...';
+                    btnManualSubmitText.textContent = 'Adicionar Patrimônio';
+
+                    activeCameraModeLabel.textContent = 'PATRIMÔNIO';
+                    activeCameraModeLabel.className = 'text-blue-400';
+                } else {
+                    btnModeSN.className = 'mode-toggle-btn flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm border-2 border-indigo-600 bg-indigo-600 text-white shadow-sm transition cursor-pointer';
+                    btnModePatrimonio.className = 'mode-toggle-btn flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition cursor-pointer';
+
+                    scanModeHint.textContent = 'Lendo Número de Série (S/N)';
+                    scanModeHint.className = 'text-[11px] font-semibold text-indigo-600';
+                    snTargetOptions.classList.remove('hidden');
+                    updateLinkLastItemLabel();
+
+                    manualCodeInput.placeholder = 'Digitar S/N (Número de Série) e pressionar Enter...';
+                    btnManualSubmitText.textContent = 'Adicionar S/N';
+
+                    activeCameraModeLabel.textContent = 'S/N (SÉRIE)';
+                    activeCameraModeLabel.className = 'text-indigo-400';
+                }
+            }
+
+            function updateLinkLastItemLabel() {
+                if (inventoryItems.length > 0) {
+                    const last = inventoryItems[0];
+                    const ref = last.patrimonio ? `Pat: ${last.patrimonio}` : (last.sn ? `S/N: ${last.sn}` : `#${inventoryItems.length}`);
+                    linkLastItemText.textContent = `Vincular ao último (${ref})`;
+                } else {
+                    linkLastItemText.textContent = 'Vincular ao último item';
+                }
+            }
+
+            // --- FUNÇÕES DE ÁUDIO (WEB AUDIO API) ---
             function playBeep(type = 'success') {
                 if (!soundEnabled) return;
                 try {
@@ -459,24 +583,18 @@
                     gainNode.connect(audioCtx.destination);
 
                     if (type === 'success') {
-                        // Bip agudo e curto estilo leitor de código de barras comercial
                         oscillator.type = 'sine';
                         oscillator.frequency.setValueAtTime(1400, audioCtx.currentTime);
                         oscillator.frequency.exponentialRampToValueAtTime(1800, audioCtx.currentTime + 0.08);
-                        
                         gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
                         gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-
                         oscillator.start(audioCtx.currentTime);
                         oscillator.stop(audioCtx.currentTime + 0.12);
                     } else if (type === 'warning') {
-                        // Dois tons graves para alerta de duplicidade
                         oscillator.type = 'triangle';
                         oscillator.frequency.setValueAtTime(350, audioCtx.currentTime);
-                        
                         gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
                         gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
-
                         oscillator.start(audioCtx.currentTime);
                         oscillator.stop(audioCtx.currentTime + 0.25);
                     }
@@ -490,9 +608,7 @@
                 if ('vibrate' in navigator) {
                     try {
                         navigator.vibrate(pattern);
-                    } catch (e) {
-                        // Ignora silenciosamente se não permitido
-                    }
+                    } catch (e) {}
                 }
             }
 
@@ -503,7 +619,7 @@
                     success: 'bg-slate-900 text-white border-emerald-500',
                     warning: 'bg-amber-600 text-white border-amber-300',
                     error: 'bg-rose-600 text-white border-rose-300',
-                    info: 'bg-blue-600 text-white border-blue-300'
+                    info: 'bg-indigo-700 text-white border-indigo-300'
                 };
 
                 toast.className = `${colors[variant] || colors.success} border-l-4 px-4 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center justify-between gap-3 transition-all duration-300 transform translate-y-2 opacity-0`;
@@ -511,24 +627,38 @@
                 
                 toastContainer.appendChild(toast);
 
-                // Anima entrada
                 requestAnimationFrame(() => {
                     toast.classList.remove('translate-y-2', 'opacity-0');
                 });
 
-                // Remove após 3 segundos
                 setTimeout(() => {
                     toast.classList.add('opacity-0', 'translate-y-2');
                     setTimeout(() => toast.remove(), 300);
                 }, 3000);
             }
 
-            // --- GERENCIAMENTO DE DADOS (LOCALSTORAGE) ---
+            // --- GERENCIAMENTO DE DADOS (LOCALSTORAGE COM MIGRAÇÃO) ---
             function loadFromStorage() {
                 try {
-                    const saved = localStorage.getItem(STORAGE_KEY);
-                    if (saved) {
-                        inventoryItems = JSON.parse(saved);
+                    const savedV2 = localStorage.getItem(STORAGE_KEY);
+                    if (savedV2) {
+                        inventoryItems = JSON.parse(savedV2);
+                    } else {
+                        // Migra dados da versão anterior (v1) caso existam
+                        const savedV1 = localStorage.getItem(LEGACY_STORAGE_KEY);
+                        if (savedV1) {
+                            const legacyItems = JSON.parse(savedV1);
+                            inventoryItems = legacyItems.map(old => ({
+                                id: old.id,
+                                patrimonio: old.code || '',
+                                sn: '',
+                                type: old.type || 'Monitor',
+                                note: old.note || '',
+                                timestamp: old.timestamp || getFormattedDateTime(),
+                                isNew: false
+                            }));
+                            saveToStorage();
+                        }
                     }
                 } catch (e) {
                     console.error('Erro ao carregar dados salvos:', e);
@@ -546,7 +676,7 @@
                 }
             }
 
-            // --- FORMATAÇÃO DE DATA/HORA ---
+            // --- FORMATAÇÃO DE DATA/HORA E ESCAPE ---
             function getFormattedDateTime() {
                 const now = new Date();
                 const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -554,59 +684,92 @@
                 return `${date} ${time}`;
             }
 
-            // --- ESCAPE HTML PARA SEGURANÇA ---
             function escapeHtml(text) {
                 const div = document.createElement('div');
                 div.textContent = text;
                 return div.innerHTML;
             }
 
-            // --- ADIÇÃO E VALIDAÇÃO DE PATRIMÔNIO ---
-            function handleNewCodeDetected(rawCode, isManual = false) {
+            // --- PROCESSAMENTO DE LEITURA (PATRIMÔNIO OU S/N) ---
+            function handleNewCodeDetected(rawCode) {
                 const cleanCode = String(rawCode).trim();
                 if (!cleanCode) return;
 
-                // Verifica se já existe na lista
-                const alreadyExists = inventoryItems.some(
-                    item => item.code.toLowerCase() === cleanCode.toLowerCase()
-                );
+                const snBehaviorInput = document.querySelector('input[name="snBehavior"]:checked');
+                const snBehavior = snBehaviorInput ? snBehaviorInput.value : 'new_without_pat';
 
-                if (alreadyExists) {
+                // Verifica duplicidade no campo correspondente
+                const isDuplicate = inventoryItems.some(item => {
+                    if (currentScanMode === 'patrimonio') {
+                        return item.patrimonio && item.patrimonio.toLowerCase() === cleanCode.toLowerCase();
+                    } else {
+                        return item.sn && item.sn.toLowerCase() === cleanCode.toLowerCase();
+                    }
+                });
+
+                if (isDuplicate) {
                     playBeep('warning');
                     triggerVibration([100, 50, 100]);
-                    pendingDuplicateCode = cleanCode;
+                    pendingDuplicate = {
+                        code: cleanCode,
+                        mode: currentScanMode,
+                        snBehavior: snBehavior
+                    };
+                    dupFieldLabel.textContent = currentScanMode === 'patrimonio' ? 'Patrimônio' : 'Número de Série (S/N)';
                     dupCodeText.textContent = cleanCode;
                     duplicateModal.classList.remove('hidden');
                     return;
                 }
 
-                addItemToInventory(cleanCode);
+                commitScannedCode(cleanCode, currentScanMode, snBehavior);
             }
 
-            function addItemToInventory(code) {
+            function commitScannedCode(code, mode, snBehavior = 'new_without_pat') {
                 const equipmentType = defaultEquipmentType.value.trim() || 'Monitor';
                 const locationNote = defaultLocation.value.trim();
 
+                // Caso 1: Modo S/N com opção "Vincular ao último item" marcada
+                if (mode === 'sn' && snBehavior === 'link_last' && inventoryItems.length > 0) {
+                    const targetItem = inventoryItems[0];
+                    targetItem.sn = code;
+                    targetItem.isNew = true;
+                    saveToStorage();
+                    renderInventory();
+
+                    playBeep('success');
+                    triggerVibration([75]);
+                    const targetLabel = targetItem.patrimonio ? `Patrimônio ${targetItem.patrimonio}` : 'último item';
+                    showToast(`S/N "${code}" vinculado ao ${targetLabel}!`, 'info');
+
+                    // Volta automaticamente para o modo Patrimônio para agilizar o próximo equipamento
+                    setScanMode('patrimonio');
+
+                    setTimeout(() => {
+                        targetItem.isNew = false;
+                    }, 1500);
+                    return;
+                }
+
+                // Caso 2: Cria um novo registro na lista (com Patrimônio OU apenas com S/N)
                 const newItem = {
                     id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-                    code: code,
+                    patrimonio: mode === 'patrimonio' ? code : '',
+                    sn: mode === 'sn' ? code : '',
                     type: equipmentType,
                     note: locationNote,
                     timestamp: getFormattedDateTime(),
                     isNew: true
                 };
 
-                // Adiciona no topo da lista (mais recente primeiro)
                 inventoryItems.unshift(newItem);
                 saveToStorage();
                 renderInventory();
 
-                // Feedback sonoro, tátil e visual
                 playBeep('success');
                 triggerVibration([75]);
-                showToast(`Patrimônio "${code}" adicionado!`, 'success');
+                const labelType = mode === 'patrimonio' ? 'Patrimônio' : 'S/N (Sem Patrimônio)';
+                showToast(`${labelType} "${code}" adicionado!`, 'success');
 
-                // Remove flag de destaque após animação
                 setTimeout(() => {
                     newItem.isNew = false;
                 }, 1500);
@@ -616,6 +779,7 @@
             function renderInventory() {
                 const filterText = searchInput.value.trim().toLowerCase();
                 totalCounter.textContent = inventoryItems.length;
+                updateLinkLastItemLabel();
 
                 if (inventoryItems.length === 0) {
                     emptyState.classList.remove('hidden');
@@ -630,7 +794,8 @@
                 const filteredItems = inventoryItems.filter(item => {
                     if (!filterText) return true;
                     return (
-                        item.code.toLowerCase().includes(filterText) ||
+                        (item.patrimonio && item.patrimonio.toLowerCase().includes(filterText)) ||
+                        (item.sn && item.sn.toLowerCase().includes(filterText)) ||
                         item.type.toLowerCase().includes(filterText) ||
                         (item.note && item.note.toLowerCase().includes(filterText))
                     );
@@ -645,31 +810,49 @@
                     return;
                 }
 
-                inventoryListContainer.innerHTML = filteredItems.map((item, idx) => {
-                    // Calcula numeração sequencial real (do 1º lido até o último)
+                inventoryListContainer.innerHTML = filteredItems.map((item) => {
                     const itemNumber = inventoryItems.indexOf(item);
                     const sequentialIndex = inventoryItems.length - itemNumber;
 
+                    const patBadge = item.patrimonio
+                        ? `<div class="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
+                               <span class="text-[10px] font-bold uppercase text-blue-600">PAT</span>
+                               <span class="font-mono font-extrabold text-sm sm:text-base text-slate-900 break-all">${escapeHtml(item.patrimonio)}</span>
+                           </div>`
+                        : `<button type="button" onclick="openEditModal('${item.id}', 'patrimonio')" class="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 border-dashed px-2.5 py-1 rounded-lg text-xs font-semibold text-amber-800 cursor-pointer transition">
+                               <span>Sem Patrimônio</span>
+                               <span class="underline text-[11px]">+ Inserir</span>
+                           </button>`;
+
+                    const snBadge = item.sn
+                        ? `<div class="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg">
+                               <span class="text-[10px] font-bold uppercase text-indigo-600">S/N</span>
+                               <span class="font-mono font-bold text-xs sm:text-sm text-indigo-950 break-all">${escapeHtml(item.sn)}</span>
+                           </div>`
+                        : `<button type="button" onclick="openEditModal('${item.id}', 'sn')" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 border-dashed px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 cursor-pointer transition">
+                               <span>+ Adicionar S/N</span>
+                           </button>`;
+
                     return `
                         <div class="p-4 hover:bg-slate-50/90 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${item.isNew ? 'animate-new-item' : ''}">
-                            <div class="flex items-start gap-3 min-w-0">
+                            <div class="flex items-start gap-3 min-w-0 flex-1">
                                 <!-- Número Sequencial -->
                                 <span class="shrink-0 w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-bold text-xs flex items-center justify-center mt-0.5">
                                     #${sequentialIndex}
                                 </span>
 
-                                <div class="min-w-0 flex-1">
+                                <div class="min-w-0 flex-1 space-y-2">
+                                    <!-- Linha Principal: Patrimônio + S/N -->
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <span class="font-mono font-extrabold text-base sm:text-lg text-slate-900 break-all">
-                                            ${escapeHtml(item.code)}
-                                        </span>
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                            ${escapeHtml(item.type)}
-                                        </span>
+                                        ${patBadge}
+                                        ${snBadge}
                                     </div>
 
-                                    <!-- Observação / Localização -->
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                                    <!-- Linha Secundária: Tipo + Data/Hora + Obs -->
+                                    <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-md font-semibold bg-slate-200/70 text-slate-700">
+                                            ${escapeHtml(item.type)}
+                                        </span>
                                         <span class="flex items-center gap-1">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -681,8 +864,8 @@
                                                 Obs: ${escapeHtml(item.note)}
                                             </span>
                                         ` : `
-                                            <button type="button" onclick="openEditModal('${item.id}')" class="text-blue-600 hover:underline font-medium cursor-pointer">
-                                                + Adicionar obs/local
+                                            <button type="button" onclick="openEditModal('${item.id}', 'note')" class="text-blue-600 hover:underline font-medium cursor-pointer">
+                                                + Obs/Local
                                             </button>
                                         `}
                                     </div>
@@ -710,33 +893,37 @@
             }
 
             // --- FUNÇÕES GLOBAIS PARA EDIÇÃO E EXCLUSÃO ---
-            window.openEditModal = function(id) {
+            window.openEditModal = function(id, focusField = 'note') {
                 const item = inventoryItems.find(i => i.id === id);
                 if (!item) return;
 
                 editItemId.value = item.id;
-                editItemCode.value = item.code;
+                editItemPatrimonio.value = item.patrimonio || '';
+                editItemSN.value = item.sn || '';
                 editItemType.value = item.type;
                 editItemNote.value = item.note || '';
                 editItemModal.classList.remove('hidden');
-                editItemNote.focus();
+
+                if (focusField === 'patrimonio') editItemPatrimonio.focus();
+                else if (focusField === 'sn') editItemSN.focus();
+                else editItemNote.focus();
             };
 
             window.deleteItem = function(id) {
                 const index = inventoryItems.findIndex(i => i.id === id);
                 if (index === -1) return;
                 
-                const removedCode = inventoryItems[index].code;
+                const removed = inventoryItems[index];
+                const label = removed.patrimonio || removed.sn || 'Item';
                 inventoryItems.splice(index, 1);
                 saveToStorage();
                 renderInventory();
-                showToast(`Patrimônio "${removedCode}" removido.`, 'info');
+                showToast(`Registro "${label}" removido.`, 'info');
             };
 
-            // --- CONTROLE DA CÂMERA (HTML5-QRCODE) ---
+            // --- CONTROLE DA CÂMERA E LANTERNA (HTML5-QRCODE) ---
             async function startScanner() {
                 try {
-                    // Inicializa contexto de áudio no clique do usuário
                     if (!audioCtx) {
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                     }
@@ -745,7 +932,6 @@
                     btnStartCamera.innerHTML = '<span>Abrindo câmera...</span>';
 
                     if (!html5QrCode) {
-                        // Configura suporte explícito a QR Code e principais Códigos de Barras de patrimônio
                         const formatsToSupport = [
                             Html5QrcodeSupportedFormats.QR_CODE,
                             Html5QrcodeSupportedFormats.CODE_128,
@@ -765,7 +951,6 @@
                         });
                     }
 
-                    // Lista câmeras disponíveis se ainda não listadas
                     if (availableCameras.length === 0) {
                         availableCameras = await Html5Qrcode.getCameras();
                     }
@@ -774,7 +959,6 @@
                         throw new Error('Nenhuma câmera encontrada neste dispositivo.');
                     }
 
-                    // Tenta selecionar a câmera traseira por padrão na primeira abertura
                     if (currentCameraIndex === 0 && availableCameras.length > 1) {
                         const backCamIdx = availableCameras.findIndex(cam => 
                             cam.label.toLowerCase().includes('back') || 
@@ -788,7 +972,6 @@
 
                     const selectedCameraId = availableCameras[currentCameraIndex].id;
 
-                    // Configuração otimizada para etiquetas retangulares (código de barras) e quadradas (QR)
                     const config = {
                         fps: 12,
                         qrbox: function(viewfinderWidth, viewfinderHeight) {
@@ -805,17 +988,52 @@
                         selectedCameraId,
                         config,
                         onScanSuccess,
-                        () => {} // Ignora erros contínuos de frame sem código
+                        () => {}
                     );
 
                     isScanning = true;
+                    torchOn = false;
                     updateCameraButtonsUI();
+                    checkTorchSupport();
 
                 } catch (err) {
                     console.error('Erro ao iniciar câmera:', err);
                     cameraPlaceholder.classList.remove('hidden');
                     showToast('Não foi possível acessar a câmera. Verifique as permissões ou use a entrada manual.', 'error');
                     resetStartButton();
+                }
+            }
+
+            function checkTorchSupport() {
+                try {
+                    const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+                    if (capabilities && capabilities.torchFeature && capabilities.torchFeature().isSupported()) {
+                        btnTorch.classList.remove('hidden');
+                    } else {
+                        btnTorch.classList.add('hidden');
+                    }
+                } catch (e) {
+                    btnTorch.classList.add('hidden');
+                }
+            }
+
+            async function toggleTorch() {
+                if (!html5QrCode || !isScanning) return;
+                try {
+                    const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+                    const torchFeature = capabilities.torchFeature();
+                    torchOn = !torchOn;
+                    await torchFeature.apply(torchOn);
+
+                    if (torchOn) {
+                        btnTorch.classList.remove('bg-slate-200', 'text-slate-800');
+                        btnTorch.classList.add('bg-amber-400', 'text-slate-950');
+                    } else {
+                        btnTorch.classList.remove('bg-amber-400', 'text-slate-950');
+                        btnTorch.classList.add('bg-slate-200', 'text-slate-800');
+                    }
+                } catch (err) {
+                    showToast('Lanterna não disponível nesta câmera.', 'warning');
                 }
             }
 
@@ -828,7 +1046,12 @@
                     }
                 }
                 isScanning = false;
+                torchOn = false;
                 scanStatusBadge.classList.add('hidden');
+                activeCameraModePill.classList.add('hidden');
+                btnTorch.classList.add('hidden');
+                btnTorch.classList.remove('bg-amber-400', 'text-slate-950');
+                btnTorch.classList.add('bg-slate-200', 'text-slate-800');
                 cameraPlaceholder.classList.remove('hidden');
                 updateCameraButtonsUI();
             }
@@ -846,7 +1069,6 @@
             }
 
             function onScanSuccess(decodedText) {
-                // Evita leituras repetidas em rajada (cooldown) ou enquanto modal está aberto
                 if (isCooldown || !duplicateModal.classList.contains('hidden')) {
                     return;
                 }
@@ -854,7 +1076,7 @@
                 isCooldown = true;
                 scanStatusBadge.classList.remove('hidden');
 
-                handleNewCodeDetected(decodedText, false);
+                handleNewCodeDetected(decodedText);
 
                 setTimeout(() => {
                     isCooldown = false;
@@ -880,6 +1102,7 @@
                 if (isScanning) {
                     btnStartCamera.classList.add('hidden');
                     btnStopCamera.classList.remove('hidden');
+                    activeCameraModePill.classList.remove('hidden');
                     if (availableCameras.length > 1) {
                         btnSwitchCamera.classList.remove('hidden');
                     }
@@ -887,32 +1110,33 @@
                     btnStartCamera.classList.remove('hidden');
                     btnStopCamera.classList.add('hidden');
                     btnSwitchCamera.classList.add('hidden');
+                    activeCameraModePill.classList.add('hidden');
                 }
             }
 
-            // --- EXPORTAÇÃO E CÓPIA ---
+            // --- EXPORTAÇÃO CSV E CÓPIA PARA ÁREA DE TRANSFERÊNCIA ---
             function copyListToClipboard() {
                 if (inventoryItems.length === 0) {
                     showToast('A lista está vazia para copiar.', 'warning');
                     return;
                 }
 
-                // Ordena cronologicamente (do primeiro lido para o último) para o relatório
                 const orderedItems = [...inventoryItems].reverse();
                 const lines = [
-                    `📋 *INVENTÁRIO DE PATRIMÔNIO* (${orderedItems.length} itens)`,
+                    `📋 *INVENTÁRIO DE EQUIPAMENTOS* (${orderedItems.length} itens)`,
                     `Data: ${new Date().toLocaleDateString('pt-BR')}`,
                     `----------------------------------------`
                 ];
 
                 orderedItems.forEach((item, index) => {
-                    const notePart = item.note ? ` | Obs: ${item.note}` : '';
-                    lines.push(`${index + 1}. *${item.code}* (${item.type})${notePart} - [${item.timestamp}]`);
+                    const patText = item.patrimonio ? `Pat: *${item.patrimonio}*` : `Pat: _Sem Patrimônio_`;
+                    const snText = item.sn ? ` | S/N: *${item.sn}*` : ``;
+                    const notePart = item.note ? ` | Obs: ${item.note}` : ``;
+                    lines.push(`${index + 1}. [${item.type}] ${patText}${snText}${notePart} (${item.timestamp})`);
                 });
 
                 const textToCopy = lines.join('\n');
 
-                // Usa textarea temporário + execCommand('copy') para máxima compatibilidade inclusive em iframes
                 const textArea = document.createElement('textarea');
                 textArea.value = textToCopy;
                 textArea.style.position = 'fixed';
@@ -930,54 +1154,108 @@
                 }
             }
 
-            function exportToCsv() {
+            /**
+             * Exporta os dados coletados para um arquivo real do Microsoft Excel (.xlsx)
+             * utilizando SheetJS (XLSX), com abas "Inventário" e "Resumo" e largura de colunas autoajustada.
+             */
+            function exportToExcel() {
                 if (inventoryItems.length === 0) {
                     showToast('A lista está vazia para exportar.', 'warning');
                     return;
                 }
 
-                const orderedItems = [...inventoryItems].reverse();
-                // Cabeçalho com separador ponto-e-vírgula (padrão Excel Brasil)
-                const headers = ['Item', 'Patrimonio', 'Tipo de Equipamento', 'Observacao / Localizacao', 'Data e Hora'];
-                
-                const csvRows = [headers.join(';')];
+                if (typeof XLSX === 'undefined') {
+                    showToast('Biblioteca Excel ainda carregando ou indisponível. Verifique sua conexão.', 'error');
+                    return;
+                }
 
-                orderedItems.forEach((item, index) => {
-                    const escapeCsvField = (field) => {
-                        const str = String(field || '').replace(/"/g, '""');
-                        return `"${str}"`;
-                    };
+                try {
+                    const orderedItems = [...inventoryItems].reverse();
 
-                    const row = [
-                        index + 1,
-                        escapeCsvField(item.code),
-                        escapeCsvField(item.type),
-                        escapeCsvField(item.note),
-                        escapeCsvField(item.timestamp)
+                    // --- ABA 1: INVENTÁRIO DETALHADO ---
+                    const inventoryRows = orderedItems.map((item, index) => ({
+                        'Item': index + 1,
+                        'Patrimônio': item.patrimonio || 'Sem Patrimônio',
+                        'Número de Série (S/N)': item.sn || '',
+                        'Equipamento': item.type || 'Monitor',
+                        'Localização / Modelo': item.note || '',
+                        'Data e Hora': item.timestamp || ''
+                    }));
+
+                    const wsInventory = XLSX.utils.json_to_sheet(inventoryRows);
+
+                    // Autoajuste da largura das colunas da aba "Inventário"
+                    const invHeaders = ['Item', 'Patrimônio', 'Número de Série (S/N)', 'Equipamento', 'Localização / Modelo', 'Data e Hora'];
+                    wsInventory['!cols'] = invHeaders.map(header => {
+                        const maxCellLen = inventoryRows.reduce((max, row) => {
+                            const val = String(row[header] ?? '');
+                            return Math.max(max, val.length);
+                        }, header.length);
+                        return { wch: Math.min(Math.max(maxCellLen + 4, 10), 50) };
+                    });
+
+                    // --- ABA 2: RESUMO E CONTAGEM ---
+                    const totalCount = orderedItems.length;
+                    const withPatCount = orderedItems.filter(i => i.patrimonio && i.patrimonio.trim() !== '').length;
+                    const withoutPatCount = totalCount - withPatCount;
+
+                    // Agrupamento por Tipo de Equipamento
+                    const byTypeMap = {};
+                    orderedItems.forEach(item => {
+                        const t = (item.type || 'Não informado').trim();
+                        byTypeMap[t] = (byTypeMap[t] || 0) + 1;
+                    });
+
+                    // Agrupamento por Localização / Modelo
+                    const byLocationMap = {};
+                    orderedItems.forEach(item => {
+                        const loc = (item.note && item.note.trim() !== '') ? item.note.trim() : '(Sem localização / modelo)';
+                        byLocationMap[loc] = (byLocationMap[loc] || 0) + 1;
+                    });
+
+                    const summaryAoA = [
+                        ['RESUMO GERAL DO INVENTÁRIO', ''],
+                        ['Data da Exportação', new Date().toLocaleString('pt-BR')],
+                        ['', ''],
+                        ['Indicador', 'Quantidade'],
+                        ['Total Geral de Equipamentos', totalCount],
+                        ['Com Número de Patrimônio', withPatCount],
+                        ['Sem Patrimônio (Apenas S/N)', withoutPatCount],
+                        ['', ''],
+                        ['AGRUPAMENTO POR EQUIPAMENTO', 'Quantidade'],
+                        ...Object.entries(byTypeMap).sort((a, b) => b[1] - a[1]),
+                        ['', ''],
+                        ['AGRUPAMENTO POR LOCALIZAÇÃO / MODELO', 'Quantidade'],
+                        ...Object.entries(byLocationMap).sort((a, b) => b[1] - a[1])
                     ];
-                    csvRows.push(row.join(';'));
-                });
 
-                // Adiciona BOM UTF-8 (\uFEFF) para o Excel abrir acentos corretamente
-                const csvContent = '\uFEFF' + csvRows.join('\n');
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
+                    const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoA);
+                    const maxCol0 = summaryAoA.reduce((max, row) => Math.max(max, String(row[0] ?? '').length), 25);
+                    const maxCol1 = summaryAoA.reduce((max, row) => Math.max(max, String(row[1] ?? '').length), 15);
+                    wsSummary['!cols'] = [
+                        { wch: Math.min(maxCol0 + 4, 55) },
+                        { wch: Math.min(maxCol1 + 4, 25) }
+                    ];
 
-                const dateStamp = new Date().toISOString().slice(0, 10);
-                const link = document.createElement('a');
-                link.setAttribute('href', url);
-                link.setAttribute('download', `inventario_patrimonio_${dateStamp}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                    // --- CRIAÇÃO DA PASTA DE TRABALHO (.XLSX) ---
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, wsInventory, 'Inventário');
+                    XLSX.utils.book_append_sheet(workbook, wsSummary, 'Resumo');
 
-                showToast('Arquivo CSV baixado com sucesso!', 'success');
+                    const dateStamp = new Date().toISOString().slice(0, 10);
+                    XLSX.writeFile(workbook, `inventario-patrimonio-${dateStamp}.xlsx`);
+
+                    showToast('Planilha Excel (.xlsx) baixada com sucesso!', 'success');
+                } catch (err) {
+                    console.error('Erro ao gerar arquivo Excel:', err);
+                    showToast('Erro ao gerar planilha Excel (.xlsx).', 'error');
+                }
             }
 
             // --- EVENT LISTENERS ---
+            btnModePatrimonio.addEventListener('click', () => setScanMode('patrimonio'));
+            btnModeSN.addEventListener('click', () => setScanMode('sn'));
 
-            // Chips de seleção rápida de tipo de equipamento
             quickTypeButtons.forEach(btn => {
                 btn.addEventListener('click', () => {
                     quickTypeButtons.forEach(b => {
@@ -990,7 +1268,6 @@
                 });
             });
 
-            // Sincroniza digitação manual no campo tipo com os chips
             defaultEquipmentType.addEventListener('input', () => {
                 const val = defaultEquipmentType.value.trim().toLowerCase();
                 quickTypeButtons.forEach(btn => {
@@ -1004,12 +1281,11 @@
                 });
             });
 
-            // Controles da câmera
             btnStartCamera.addEventListener('click', startScanner);
             btnStopCamera.addEventListener('click', stopScanner);
+            btnTorch.addEventListener('click', toggleTorch);
             btnSwitchCamera.addEventListener('click', switchCamera);
 
-            // Toggle Som
             btnToggleSound.addEventListener('click', () => {
                 soundEnabled = !soundEnabled;
                 if (soundEnabled) {
@@ -1024,26 +1300,23 @@
                 }
             });
 
-            // Entrada Manual
             manualEntryForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const code = manualCodeInput.value.trim();
                 if (!code) {
-                    showToast('Digite um número de patrimônio antes de adicionar.', 'warning');
+                    const label = currentScanMode === 'patrimonio' ? 'um número de patrimônio' : 'um S/N';
+                    showToast(`Digite ${label} antes de adicionar.`, 'warning');
                     manualCodeInput.focus();
                     return;
                 }
-                handleNewCodeDetected(code, true);
+                handleNewCodeDetected(code);
                 manualCodeInput.value = '';
                 manualCodeInput.focus();
             });
 
-            // Filtro na lista
             searchInput.addEventListener('input', renderInventory);
-
-            // Exportação e Limpeza
             btnCopyList.addEventListener('click', copyListToClipboard);
-            btnExportCsv.addEventListener('click', exportToCsv);
+            btnExportExcel.addEventListener('click', exportToExcel);
 
             btnClearList.addEventListener('click', () => {
                 if (inventoryItems.length === 0) {
@@ -1066,21 +1339,19 @@
                 showToast('Lista limpa com sucesso.', 'info');
             });
 
-            // Modal de Duplicidade
             btnDupIgnore.addEventListener('click', () => {
-                pendingDuplicateCode = null;
+                pendingDuplicate = null;
                 duplicateModal.classList.add('hidden');
             });
 
             btnDupAddAnyway.addEventListener('click', () => {
-                if (pendingDuplicateCode) {
-                    addItemToInventory(pendingDuplicateCode);
-                    pendingDuplicateCode = null;
+                if (pendingDuplicate) {
+                    commitScannedCode(pendingDuplicate.code, pendingDuplicate.mode, pendingDuplicate.snBehavior);
+                    pendingDuplicate = null;
                 }
                 duplicateModal.classList.add('hidden');
             });
 
-            // Modal de Edição
             btnCancelEdit.addEventListener('click', () => {
                 editItemModal.classList.add('hidden');
             });
@@ -1090,7 +1361,14 @@
                 const id = editItemId.value;
                 const item = inventoryItems.find(i => i.id === id);
                 if (item) {
-                    item.code = editItemCode.value.trim() || item.code;
+                    const pat = editItemPatrimonio.value.trim();
+                    const sn = editItemSN.value.trim();
+                    if (!pat && !sn) {
+                        showToast('Informe pelo menos o Patrimônio ou o S/N.', 'warning');
+                        return;
+                    }
+                    item.patrimonio = pat;
+                    item.sn = sn;
                     item.type = editItemType.value.trim() || 'Monitor';
                     item.note = editItemNote.value.trim();
                     saveToStorage();
@@ -1100,8 +1378,9 @@
                 editItemModal.classList.add('hidden');
             });
 
-            // Inicializa dados salvos ao carregar a página
+            // Inicializa dados salvos e modo padrão
             loadFromStorage();
+            setScanMode('patrimonio');
         });
     </script>
 </body>
