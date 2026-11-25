@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inventário Rápido - Leitor de Patrimônio</title>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Biblioteca html5-qrcode via CDN -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Ajustes personalizados para o container do scanner */
+        #reader {
+            width: 100%;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+        #reader video {
+            object-fit: cover !important;
+            border-radius: 0.75rem;
+        }
+        /* Esconde elementos padrão desnecessários da lib para manter o visual limpo */
+        #reader__dashboard_section_csr span,
+        #reader__dashboard_section_swaplink {
+            display: none !important;
+        }
+        /* Animação suave para novos itens */
+        @keyframes highlightRow {
+            0% { background-color: #dbeafe; transform: scale(1.01); }
+            100% { background-color: #ffffff; transform: scale(1); }
+        }
+        .animate-new-item {
+            animation: highlightRow 1.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Cabeçalho Superior -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2 rounded-xl shadow-inner">
+                    <!-- Ícone de Código de Barras / Monitor -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight leading-tight">Inventário de Patrimônio</h1>
+                    <p class="text-xs text-slate-400">Leitor de QR Code & Código de Barras</p>
+                </div>
+            </div>
+
+            <!-- Contador Total em Destaque -->
+            <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 px-3.5 py-1.5 rounded-xl">
+                <span class="text-xs uppercase font-semibold text-slate-400 hidden sm:inline">Total Lido:</span>
+                <span id="totalCounter" class="text-xl sm:text-2xl font-extrabold text-blue-400 tabular-nums">0</span>
+                <span class="text-xs text-slate-300 font-medium">itens</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-1 max-w-4xl w-full mx-auto px-4 py-5 space-y-6">
+
+        <!-- Aviso de HTTPS / Permissão (Exibido dinamicamente se necessário) -->
+        <div id="httpsWarning" class="hidden bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-sm">
+            <div class="flex items-start gap-3">
+                <svg class="h-5 w-5 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div class="text-sm text-amber-900">
+                    <p class="font-semibold">Atenção ao acesso à câmera</p>
+                    <p class="mt-1">Navegadores exigem conexão segura (<strong>HTTPS</strong>) ou <strong>localhost</strong> para liberar a câmera. Se a câmera não abrir, utilize a opção de <strong>Entrada Manual</strong> abaixo.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seção 1: Configuração Rápida Pré-Leitura & Scanner -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">Configuração Padrão para Próxima Leitura</h2>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- Tipo de Equipamento -->
+                    <div>
+                        <label for="defaultEquipmentType" class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipamento</label>
+                        <div class="flex flex-wrap gap-1.5" id="quickTypeButtons">
+                            <button type="button" data-type="Monitor" class="type-chip active bg-blue-600 text-white border-blue-600 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Monitor</button>
+                            <button type="button" data-type="CPU / Desktop" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">CPU</button>
+                            <button type="button" data-type="Notebook" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Notebook</button>
+                            <button type="button" data-type="Periférico" class="type-chip bg-white text-slate-700 border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer">Periférico</button>
+                        </div>
+                        <input type="text" id="defaultEquipmentType" value="Monitor" placeholder="Ou digite outro tipo..." class="mt-2 w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    </div>
+
+                    <!-- Localização / Observação Fixa -->
+                    <div>
+                        <label for="defaultLocation" class="block text-xs font-semibold text-slate-700 mb-1">Localização / Modelo / Obs. (Opcional)</label>
+                        <input type="text" id="defaultLocation" placeholder="Ex: Sala TI, Dell 24', Bancada 2..." class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        <p class="text-[11px] text-slate-500 mt-1.5">Este texto será preenchido automaticamente em cada leitura para agilizar lotes no mesmo setor.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Área do Leitor de Câmera -->
+            <div class="p-4 sm:p-5 space-y-4">
+                <!-- Container do Vídeo -->
+                <div class="relative w-full max-w-md mx-auto">
+                    <div id="reader" class="min-h-[240px] sm:min-h-[280px] flex items-center justify-center border-2 border-dashed border-slate-300">
+                        <div id="cameraPlaceholder" class="text-center p-6 text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <p class="text-sm font-medium text-slate-300">Câmera desligada</p>
+                            <p class="text-xs text-slate-400 mt-1">Toque em "Iniciar Câmera" para escanear etiquetas</p>
+                        </div>
+                    </div>
+
+                    <!-- Status de Cooldown / Leitura -->
+                    <div id="scanStatusBadge" class="hidden absolute top-3 left-3 right-3 bg-emerald-600/95 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-lg text-center backdrop-blur-sm transition-all">
+                        Código capturado! Aguarde 2s para próxima leitura...
+                    </div>
+                </div>
+
+                <!-- Controles da Câmera -->
+                <div class="flex flex-wrap items-center justify-center gap-2.5">
+                    <button id="btnStartCamera" type="button" class="flex-1 sm:flex-none min-w-[160px] flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 px-5 rounded-xl shadow-sm transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Iniciar Câmera</span>
+                    </button>
+
+                    <button id="btnStopCamera" type="button" class="hidden flex-1 sm:flex-none min-w-[150px] flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-semibold py-3 px-5 rounded-xl shadow-sm transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                        </svg>
+                        <span>Parar Câmera</span>
+                    </button>
+
+                    <button id="btnSwitchCamera" type="button" class="hidden flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-800 font-semibold py-3 px-4 rounded-xl transition cursor-pointer" title="Alternar câmera traseira/frontal">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Trocar Câmera</span>
+                    </button>
+
+                    <!-- Botão de Som (Mute/Unmute) -->
+                    <button id="btnToggleSound" type="button" class="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-medium py-3 px-4 rounded-xl transition cursor-pointer" title="Ativar/Desativar Bip Sonoro">
+                        <span id="soundIconOn">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                        </span>
+                        <span id="soundIconOff" class="hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                            </svg>
+                        </span>
+                        <span class="text-xs font-semibold hidden sm:inline" id="soundLabel">Bip Ativo</span>
+                    </button>
+                </div>
+
+                <!-- Entrada Manual (Para etiquetas danificadas ou leitor USB) -->
+                <div class="pt-3 border-t border-slate-100">
+                    <form id="manualEntryForm" class="flex flex-col sm:flex-row gap-2">
+                        <div class="relative flex-1">
+                            <input type="text" id="manualCodeInput" placeholder="Etiqueta ilegível? Digite o patrimônio e pressione Enter..." class="w-full pl-3.5 pr-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        </div>
+                        <button type="submit" class="bg-slate-800 hover:bg-slate-900 active:bg-black text-white font-semibold py-3 px-5 rounded-xl text-sm transition flex items-center justify-center gap-2 cursor-pointer shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Adicionar Manual</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Seção 2: Lista de Itens Coletados & Exportação -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <!-- Barra de Ferramentas da Lista -->
+            <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-800">Itens Inventariados</h2>
+                    <p class="text-xs text-slate-500">Salvo automaticamente neste dispositivo</p>
+                </div>
+
+                <!-- Botões de Ação / Exportação -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="btnCopyList" type="button" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-300 font-semibold py-2.5 px-3.5 rounded-xl text-xs sm:text-sm shadow-xs transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        <span>Copiar Lista</span>
+                    </button>
+
+                    <button id="btnExportCsv" type="button" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-2.5 px-3.5 rounded-xl text-xs sm:text-sm shadow-xs transition cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>Exportar CSV</span>
+                    </button>
+
+                    <button id="btnClearList" type="button" class="flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-2.5 px-3 rounded-xl text-xs sm:text-sm transition cursor-pointer" title="Limpar toda a lista">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span class="hidden sm:inline">Limpar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtro Rápido na Lista (Aparece quando há itens) -->
+            <div id="searchBarContainer" class="hidden px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <div class="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="Filtrar por patrimônio, tipo ou observação..." class="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+            </div>
+
+            <!-- Estado Vazio -->
+            <div id="emptyState" class="p-10 text-center">
+                <div class="w-14 h-14 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                </div>
+                <h3 class="text-sm font-bold text-slate-700">Nenhum patrimônio lido ainda</h3>
+                <p class="text-xs text-slate-500 mt-1 max-w-xs mx-auto">Inicie a câmera acima e aponte para o código de barras ou QR code da etiqueta do monitor.</p>
+            </div>
+
+            <!-- Lista Responsiva (Cards no Mobile / Tabela no Desktop) -->
+            <div id="inventoryListContainer" class="divide-y divide-slate-200">
+                <!-- Itens serão injetados via JavaScript -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Rodapé -->
+    <footer class="max-w-4xl w-full mx-auto px-4 py-6 text-center text-xs text-slate-400">
+        Ferramenta de Inventário Local &bull; Os dados ficam salvos apenas no navegador deste dispositivo.
+    </footer>
+
+    <!-- Toast de Notificação Flutuante -->
+    <div id="toastContainer" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-[92%] max-w-md pointer-events-none"></div>
+
+    <!-- Modal Customizado para Duplicidade -->
+    <div id="duplicateModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fade-in">
+            <div class="flex items-center gap-3 text-amber-600 mb-3">
+                <div class="bg-amber-100 p-2.5 rounded-xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Patrimônio Já Lido!</h3>
+            </div>
+            <p class="text-sm text-slate-600 leading-relaxed">
+                O código <strong id="dupCodeText" class="text-slate-900 bg-slate-100 px-2 py-0.5 rounded font-mono"></strong> já consta na sua lista de inventário. Deseja adicioná-lo novamente como um registro duplicado?
+            </p>
+            <div class="mt-6 flex flex-col-reverse sm:flex-row gap-2.5 sm:justify-end">
+                <button id="btnDupIgnore" type="button" class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                    Ignorar Leitura
+                </button>
+                <button id="btnDupAddAnyway" type="button" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm shadow-sm transition cursor-pointer">
+                    Adicionar Mesmo Assim
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Customizado para Confirmação de Limpeza -->
+    <div id="clearConfirmModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center gap-3 text-rose-600 mb-3">
+                <div class="bg-rose-100 p-2.5 rounded-xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Limpar Toda a Lista?</h3>
+            </div>
+            <p class="text-sm text-slate-600 leading-relaxed">
+                Tem certeza que deseja apagar todos os <strong id="clearCountText" class="text-slate-900">0</strong> itens escaneados? Essa ação não poderá ser desfeita.
+            </p>
+            <div class="mt-6 flex flex-col-reverse sm:flex-row gap-2.5 sm:justify-end">
+                <button id="btnCancelClear" type="button" class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                    Cancelar
+                </button>
+                <button id="btnConfirmClear" type="button" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm shadow-sm transition cursor-pointer">
+                    Sim, Apagar Tudo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Edição de Item -->
+    <div id="editItemModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <h3 class="text-lg font-bold text-slate-900 mb-4">Editar Item do Inventário</h3>
+            <form id="editItemForm" class="space-y-4">
+                <input type="hidden" id="editItemId">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Número do Patrimônio</label>
+                    <input type="text" id="editItemCode" required class="w-full px-3.5 py-2.5 text-sm font-mono font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipamento</label>
+                    <input type="text" id="editItemType" required class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Observação / Localização / Modelo</label>
+                    <input type="text" id="editItemNote" placeholder="Ex: Monitor Dell P2422H - Mesa 04" class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="pt-2 flex flex-col-reverse sm:flex-row gap-2.5 sm:justify-end">
+                    <button type="button" id="btnCancelEdit" class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm transition cursor-pointer">
+                        Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lógica JavaScript Completa -->
+    <script>
+        /**
+         * Aplicativo de Inventário de Patrimônio
+         * Gerencia leitura de QR Code / Código de Barras via html5-qrcode,
+         * armazenamento local, feedback sonoro/háptico e exportação.
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONSTANTES E ESTADO DA APLICAÇÃO ---
+            const STORAGE_KEY = 'inventario_patrimonio_v1';
+            const COOLDOWN_MS = 2500; // 2.5 segundos de intervalo entre leituras automáticas
+
+            let inventoryItems = [];
+            let html5QrCode = null;
+            let isScanning = false;
+            let availableCameras = [];
+            let currentCameraIndex = 0;
+            let isCooldown = false;
+            let soundEnabled = true;
+            let pendingDuplicateCode = null;
+            let audioCtx = null;
+
+            // --- ELEMENTOS DO DOM ---
+            const totalCounter = document.getElementById('totalCounter');
+            const httpsWarning = document.getElementById('httpsWarning');
+            const defaultEquipmentType = document.getElementById('defaultEquipmentType');
+            const defaultLocation = document.getElementById('defaultLocation');
+            const quickTypeButtons = document.querySelectorAll('.type-chip');
+            
+            const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+            const scanStatusBadge = document.getElementById('scanStatusBadge');
+            const btnStartCamera = document.getElementById('btnStartCamera');
+            const btnStopCamera = document.getElementById('btnStopCamera');
+            const btnSwitchCamera = document.getElementById('btnSwitchCamera');
+            const btnToggleSound = document.getElementById('btnToggleSound');
+            const soundIconOn = document.getElementById('soundIconOn');
+            const soundIconOff = document.getElementById('soundIconOff');
+            const soundLabel = document.getElementById('soundLabel');
+
+            const manualEntryForm = document.getElementById('manualEntryForm');
+            const manualCodeInput = document.getElementById('manualCodeInput');
+
+            const btnCopyList = document.getElementById('btnCopyList');
+            const btnExportCsv = document.getElementById('btnExportCsv');
+            const btnClearList = document.getElementById('btnClearList');
+            const searchBarContainer = document.getElementById('searchBarContainer');
+            const searchInput = document.getElementById('searchInput');
+            const emptyState = document.getElementById('emptyState');
+            const inventoryListContainer = document.getElementById('inventoryListContainer');
+            const toastContainer = document.getElementById('toastContainer');
+
+            // Modais
+            const duplicateModal = document.getElementById('duplicateModal');
+            const dupCodeText = document.getElementById('dupCodeText');
+            const btnDupIgnore = document.getElementById('btnDupIgnore');
+            const btnDupAddAnyway = document.getElementById('btnDupAddAnyway');
+
+            const clearConfirmModal = document.getElementById('clearConfirmModal');
+            const clearCountText = document.getElementById('clearCountText');
+            const btnCancelClear = document.getElementById('btnCancelClear');
+            const btnConfirmClear = document.getElementById('btnConfirmClear');
+
+            const editItemModal = document.getElementById('editItemModal');
+            const editItemForm = document.getElementById('editItemForm');
+            const editItemId = document.getElementById('editItemId');
+            const editItemCode = document.getElementById('editItemCode');
+            const editItemType = document.getElementById('editItemType');
+            const editItemNote = document.getElementById('editItemNote');
+            const btnCancelEdit = document.getElementById('btnCancelEdit');
+
+            // --- VERIFICAÇÃO DE CONTEXTO SEGURO (HTTPS) ---
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                httpsWarning.classList.remove('hidden');
+            }
+
+            // --- FUNÇÕES DE ÁUDIO (WEB AUDIO API - SEM ARQUIVOS EXTERNOS) ---
+            function playBeep(type = 'success') {
+                if (!soundEnabled) return;
+                try {
+                    if (!audioCtx) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+
+                    if (type === 'success') {
+                        // Bip agudo e curto estilo leitor de código de barras comercial
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(1400, audioCtx.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(1800, audioCtx.currentTime + 0.08);
+                        
+                        gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+
+                        oscillator.start(audioCtx.currentTime);
+                        oscillator.stop(audioCtx.currentTime + 0.12);
+                    } else if (type === 'warning') {
+                        // Dois tons graves para alerta de duplicidade
+                        oscillator.type = 'triangle';
+                        oscillator.frequency.setValueAtTime(350, audioCtx.currentTime);
+                        
+                        gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+
+                        oscillator.start(audioCtx.currentTime);
+                        oscillator.stop(audioCtx.currentTime + 0.25);
+                    }
+                } catch (err) {
+                    console.warn('Áudio não suportado ou bloqueado:', err);
+                }
+            }
+
+            // --- VIBRAÇÃO HÁPTICA ---
+            function triggerVibration(pattern = [80]) {
+                if ('vibrate' in navigator) {
+                    try {
+                        navigator.vibrate(pattern);
+                    } catch (e) {
+                        // Ignora silenciosamente se não permitido
+                    }
+                }
+            }
+
+            // --- NOTIFICAÇÕES VISUAIS (TOAST) ---
+            function showToast(message, variant = 'success') {
+                const toast = document.createElement('div');
+                const colors = {
+                    success: 'bg-slate-900 text-white border-emerald-500',
+                    warning: 'bg-amber-600 text-white border-amber-300',
+                    error: 'bg-rose-600 text-white border-rose-300',
+                    info: 'bg-blue-600 text-white border-blue-300'
+                };
+
+                toast.className = `${colors[variant] || colors.success} border-l-4 px-4 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center justify-between gap-3 transition-all duration-300 transform translate-y-2 opacity-0`;
+                toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+                
+                toastContainer.appendChild(toast);
+
+                // Anima entrada
+                requestAnimationFrame(() => {
+                    toast.classList.remove('translate-y-2', 'opacity-0');
+                });
+
+                // Remove após 3 segundos
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }
+
+            // --- GERENCIAMENTO DE DADOS (LOCALSTORAGE) ---
+            function loadFromStorage() {
+                try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) {
+                        inventoryItems = JSON.parse(saved);
+                    }
+                } catch (e) {
+                    console.error('Erro ao carregar dados salvos:', e);
+                    inventoryItems = [];
+                }
+                renderInventory();
+            }
+
+            function saveToStorage() {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(inventoryItems));
+                } catch (e) {
+                    console.error('Erro ao salvar no localStorage:', e);
+                    showToast('Aviso: Não foi possível salvar no armazenamento local.', 'warning');
+                }
+            }
+
+            // --- FORMATAÇÃO DE DATA/HORA ---
+            function getFormattedDateTime() {
+                const now = new Date();
+                const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                return `${date} ${time}`;
+            }
+
+            // --- ESCAPE HTML PARA SEGURANÇA ---
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // --- ADIÇÃO E VALIDAÇÃO DE PATRIMÔNIO ---
+            function handleNewCodeDetected(rawCode, isManual = false) {
+                const cleanCode = String(rawCode).trim();
+                if (!cleanCode) return;
+
+                // Verifica se já existe na lista
+                const alreadyExists = inventoryItems.some(
+                    item => item.code.toLowerCase() === cleanCode.toLowerCase()
+                );
+
+                if (alreadyExists) {
+                    playBeep('warning');
+                    triggerVibration([100, 50, 100]);
+                    pendingDuplicateCode = cleanCode;
+                    dupCodeText.textContent = cleanCode;
+                    duplicateModal.classList.remove('hidden');
+                    return;
+                }
+
+                addItemToInventory(cleanCode);
+            }
+
+            function addItemToInventory(code) {
+                const equipmentType = defaultEquipmentType.value.trim() || 'Monitor';
+                const locationNote = defaultLocation.value.trim();
+
+                const newItem = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+                    code: code,
+                    type: equipmentType,
+                    note: locationNote,
+                    timestamp: getFormattedDateTime(),
+                    isNew: true
+                };
+
+                // Adiciona no topo da lista (mais recente primeiro)
+                inventoryItems.unshift(newItem);
+                saveToStorage();
+                renderInventory();
+
+                // Feedback sonoro, tátil e visual
+                playBeep('success');
+                triggerVibration([75]);
+                showToast(`Patrimônio "${code}" adicionado!`, 'success');
+
+                // Remove flag de destaque após animação
+                setTimeout(() => {
+                    newItem.isNew = false;
+                }, 1500);
+            }
+
+            // --- RENDERIZAÇÃO DA LISTA ---
+            function renderInventory() {
+                const filterText = searchInput.value.trim().toLowerCase();
+                totalCounter.textContent = inventoryItems.length;
+
+                if (inventoryItems.length === 0) {
+                    emptyState.classList.remove('hidden');
+                    searchBarContainer.classList.add('hidden');
+                    inventoryListContainer.innerHTML = '';
+                    return;
+                }
+
+                emptyState.classList.add('hidden');
+                searchBarContainer.classList.remove('hidden');
+
+                const filteredItems = inventoryItems.filter(item => {
+                    if (!filterText) return true;
+                    return (
+                        item.code.toLowerCase().includes(filterText) ||
+                        item.type.toLowerCase().includes(filterText) ||
+                        (item.note && item.note.toLowerCase().includes(filterText))
+                    );
+                });
+
+                if (filteredItems.length === 0) {
+                    inventoryListContainer.innerHTML = `
+                        <div class="p-8 text-center text-sm text-slate-500">
+                            Nenhum item encontrado para "<strong>${escapeHtml(filterText)}</strong>".
+                        </div>
+                    `;
+                    return;
+                }
+
+                inventoryListContainer.innerHTML = filteredItems.map((item, idx) => {
+                    // Calcula numeração sequencial real (do 1º lido até o último)
+                    const itemNumber = inventoryItems.indexOf(item);
+                    const sequentialIndex = inventoryItems.length - itemNumber;
+
+                    return `
+                        <div class="p-4 hover:bg-slate-50/90 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${item.isNew ? 'animate-new-item' : ''}">
+                            <div class="flex items-start gap-3 min-w-0">
+                                <!-- Número Sequencial -->
+                                <span class="shrink-0 w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-bold text-xs flex items-center justify-center mt-0.5">
+                                    #${sequentialIndex}
+                                </span>
+
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="font-mono font-extrabold text-base sm:text-lg text-slate-900 break-all">
+                                            ${escapeHtml(item.code)}
+                                        </span>
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                            ${escapeHtml(item.type)}
+                                        </span>
+                                    </div>
+
+                                    <!-- Observação / Localização -->
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                                        <span class="flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            ${escapeHtml(item.timestamp)}
+                                        </span>
+                                        ${item.note ? `
+                                            <span class="text-slate-700 font-medium bg-slate-100 px-2 py-0.5 rounded">
+                                                Obs: ${escapeHtml(item.note)}
+                                            </span>
+                                        ` : `
+                                            <button type="button" onclick="openEditModal('${item.id}')" class="text-blue-600 hover:underline font-medium cursor-pointer">
+                                                + Adicionar obs/local
+                                            </button>
+                                        `}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Botões de Ação do Item -->
+                            <div class="flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                                <button type="button" onclick="openEditModal('${item.id}')" class="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl transition cursor-pointer" title="Editar item">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    <span>Editar</span>
+                                </button>
+
+                                <button type="button" onclick="deleteItem('${item.id}')" class="p-2 text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl transition cursor-pointer" title="Excluir item">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // --- FUNÇÕES GLOBAIS PARA EDIÇÃO E EXCLUSÃO ---
+            window.openEditModal = function(id) {
+                const item = inventoryItems.find(i => i.id === id);
+                if (!item) return;
+
+                editItemId.value = item.id;
+                editItemCode.value = item.code;
+                editItemType.value = item.type;
+                editItemNote.value = item.note || '';
+                editItemModal.classList.remove('hidden');
+                editItemNote.focus();
+            };
+
+            window.deleteItem = function(id) {
+                const index = inventoryItems.findIndex(i => i.id === id);
+                if (index === -1) return;
+                
+                const removedCode = inventoryItems[index].code;
+                inventoryItems.splice(index, 1);
+                saveToStorage();
+                renderInventory();
+                showToast(`Patrimônio "${removedCode}" removido.`, 'info');
+            };
+
+            // --- CONTROLE DA CÂMERA (HTML5-QRCODE) ---
+            async function startScanner() {
+                try {
+                    // Inicializa contexto de áudio no clique do usuário
+                    if (!audioCtx) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+
+                    btnStartCamera.disabled = true;
+                    btnStartCamera.innerHTML = '<span>Abrindo câmera...</span>';
+
+                    if (!html5QrCode) {
+                        // Configura suporte explícito a QR Code e principais Códigos de Barras de patrimônio
+                        const formatsToSupport = [
+                            Html5QrcodeSupportedFormats.QR_CODE,
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.CODE_39,
+                            Html5QrcodeSupportedFormats.CODE_93,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.EAN_8,
+                            Html5QrcodeSupportedFormats.ITF,
+                            Html5QrcodeSupportedFormats.CODABAR,
+                            Html5QrcodeSupportedFormats.UPC_A,
+                            Html5QrcodeSupportedFormats.UPC_E,
+                            Html5QrcodeSupportedFormats.DATA_MATRIX
+                        ];
+                        html5QrCode = new Html5Qrcode("reader", { 
+                            formatsToSupport: formatsToSupport,
+                            verbose: false 
+                        });
+                    }
+
+                    // Lista câmeras disponíveis se ainda não listadas
+                    if (availableCameras.length === 0) {
+                        availableCameras = await Html5Qrcode.getCameras();
+                    }
+
+                    if (!availableCameras || availableCameras.length === 0) {
+                        throw new Error('Nenhuma câmera encontrada neste dispositivo.');
+                    }
+
+                    // Tenta selecionar a câmera traseira por padrão na primeira abertura
+                    if (currentCameraIndex === 0 && availableCameras.length > 1) {
+                        const backCamIdx = availableCameras.findIndex(cam => 
+                            cam.label.toLowerCase().includes('back') || 
+                            cam.label.toLowerCase().includes('traseira') ||
+                            cam.label.toLowerCase().includes('environment')
+                        );
+                        if (backCamIdx !== -1) {
+                            currentCameraIndex = backCamIdx;
+                        }
+                    }
+
+                    const selectedCameraId = availableCameras[currentCameraIndex].id;
+
+                    // Configuração otimizada para etiquetas retangulares (código de barras) e quadradas (QR)
+                    const config = {
+                        fps: 12,
+                        qrbox: function(viewfinderWidth, viewfinderHeight) {
+                            const width = Math.floor(viewfinderWidth * 0.82);
+                            const height = Math.floor(viewfinderHeight * 0.55);
+                            return { width: Math.max(width, 200), height: Math.max(height, 120) };
+                        },
+                        aspectRatio: 1.333333
+                    };
+
+                    cameraPlaceholder.classList.add('hidden');
+
+                    await html5QrCode.start(
+                        selectedCameraId,
+                        config,
+                        onScanSuccess,
+                        () => {} // Ignora erros contínuos de frame sem código
+                    );
+
+                    isScanning = true;
+                    updateCameraButtonsUI();
+
+                } catch (err) {
+                    console.error('Erro ao iniciar câmera:', err);
+                    cameraPlaceholder.classList.remove('hidden');
+                    showToast('Não foi possível acessar a câmera. Verifique as permissões ou use a entrada manual.', 'error');
+                    resetStartButton();
+                }
+            }
+
+            async function stopScanner() {
+                if (html5QrCode && isScanning) {
+                    try {
+                        await html5QrCode.stop();
+                    } catch (err) {
+                        console.warn('Erro ao parar scanner:', err);
+                    }
+                }
+                isScanning = false;
+                scanStatusBadge.classList.add('hidden');
+                cameraPlaceholder.classList.remove('hidden');
+                updateCameraButtonsUI();
+            }
+
+            async function switchCamera() {
+                if (availableCameras.length <= 1) {
+                    showToast('Apenas uma câmera detectada neste dispositivo.', 'info');
+                    return;
+                }
+                currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+                if (isScanning) {
+                    await stopScanner();
+                    await startScanner();
+                }
+            }
+
+            function onScanSuccess(decodedText) {
+                // Evita leituras repetidas em rajada (cooldown) ou enquanto modal está aberto
+                if (isCooldown || !duplicateModal.classList.contains('hidden')) {
+                    return;
+                }
+
+                isCooldown = true;
+                scanStatusBadge.classList.remove('hidden');
+
+                handleNewCodeDetected(decodedText, false);
+
+                setTimeout(() => {
+                    isCooldown = false;
+                    if (isScanning) {
+                        scanStatusBadge.classList.add('hidden');
+                    }
+                }, COOLDOWN_MS);
+            }
+
+            function resetStartButton() {
+                btnStartCamera.disabled = false;
+                btnStartCamera.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Iniciar Câmera</span>
+                `;
+            }
+
+            function updateCameraButtonsUI() {
+                resetStartButton();
+                if (isScanning) {
+                    btnStartCamera.classList.add('hidden');
+                    btnStopCamera.classList.remove('hidden');
+                    if (availableCameras.length > 1) {
+                        btnSwitchCamera.classList.remove('hidden');
+                    }
+                } else {
+                    btnStartCamera.classList.remove('hidden');
+                    btnStopCamera.classList.add('hidden');
+                    btnSwitchCamera.classList.add('hidden');
+                }
+            }
+
+            // --- EXPORTAÇÃO E CÓPIA ---
+            function copyListToClipboard() {
+                if (inventoryItems.length === 0) {
+                    showToast('A lista está vazia para copiar.', 'warning');
+                    return;
+                }
+
+                // Ordena cronologicamente (do primeiro lido para o último) para o relatório
+                const orderedItems = [...inventoryItems].reverse();
+                const lines = [
+                    `📋 *INVENTÁRIO DE PATRIMÔNIO* (${orderedItems.length} itens)`,
+                    `Data: ${new Date().toLocaleDateString('pt-BR')}`,
+                    `----------------------------------------`
+                ];
+
+                orderedItems.forEach((item, index) => {
+                    const notePart = item.note ? ` | Obs: ${item.note}` : '';
+                    lines.push(`${index + 1}. *${item.code}* (${item.type})${notePart} - [${item.timestamp}]`);
+                });
+
+                const textToCopy = lines.join('\n');
+
+                // Usa textarea temporário + execCommand('copy') para máxima compatibilidade inclusive em iframes
+                const textArea = document.createElement('textarea');
+                textArea.value = textToCopy;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+
+                try {
+                    document.execCommand('copy');
+                    showToast('Lista copiada! Pronta para colar no WhatsApp ou E-mail.', 'success');
+                } catch (err) {
+                    showToast('Erro ao copiar texto.', 'error');
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            }
+
+            function exportToCsv() {
+                if (inventoryItems.length === 0) {
+                    showToast('A lista está vazia para exportar.', 'warning');
+                    return;
+                }
+
+                const orderedItems = [...inventoryItems].reverse();
+                // Cabeçalho com separador ponto-e-vírgula (padrão Excel Brasil)
+                const headers = ['Item', 'Patrimonio', 'Tipo de Equipamento', 'Observacao / Localizacao', 'Data e Hora'];
+                
+                const csvRows = [headers.join(';')];
+
+                orderedItems.forEach((item, index) => {
+                    const escapeCsvField = (field) => {
+                        const str = String(field || '').replace(/"/g, '""');
+                        return `"${str}"`;
+                    };
+
+                    const row = [
+                        index + 1,
+                        escapeCsvField(item.code),
+                        escapeCsvField(item.type),
+                        escapeCsvField(item.note),
+                        escapeCsvField(item.timestamp)
+                    ];
+                    csvRows.push(row.join(';'));
+                });
+
+                // Adiciona BOM UTF-8 (\uFEFF) para o Excel abrir acentos corretamente
+                const csvContent = '\uFEFF' + csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+
+                const dateStamp = new Date().toISOString().slice(0, 10);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', `inventario_patrimonio_${dateStamp}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                showToast('Arquivo CSV baixado com sucesso!', 'success');
+            }
+
+            // --- EVENT LISTENERS ---
+
+            // Chips de seleção rápida de tipo de equipamento
+            quickTypeButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    quickTypeButtons.forEach(b => {
+                        b.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+                        b.classList.add('bg-white', 'text-slate-700', 'border-slate-300');
+                    });
+                    btn.classList.remove('bg-white', 'text-slate-700', 'border-slate-300');
+                    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+                    defaultEquipmentType.value = btn.dataset.type;
+                });
+            });
+
+            // Sincroniza digitação manual no campo tipo com os chips
+            defaultEquipmentType.addEventListener('input', () => {
+                const val = defaultEquipmentType.value.trim().toLowerCase();
+                quickTypeButtons.forEach(btn => {
+                    if (btn.dataset.type.toLowerCase() === val) {
+                        btn.classList.remove('bg-white', 'text-slate-700', 'border-slate-300');
+                        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+                    } else {
+                        btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+                        btn.classList.add('bg-white', 'text-slate-700', 'border-slate-300');
+                    }
+                });
+            });
+
+            // Controles da câmera
+            btnStartCamera.addEventListener('click', startScanner);
+            btnStopCamera.addEventListener('click', stopScanner);
+            btnSwitchCamera.addEventListener('click', switchCamera);
+
+            // Toggle Som
+            btnToggleSound.addEventListener('click', () => {
+                soundEnabled = !soundEnabled;
+                if (soundEnabled) {
+                    soundIconOn.classList.remove('hidden');
+                    soundIconOff.classList.add('hidden');
+                    soundLabel.textContent = 'Bip Ativo';
+                    playBeep('success');
+                } else {
+                    soundIconOn.classList.add('hidden');
+                    soundIconOff.classList.remove('hidden');
+                    soundLabel.textContent = 'Mudo';
+                }
+            });
+
+            // Entrada Manual
+            manualEntryForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const code = manualCodeInput.value.trim();
+                if (!code) {
+                    showToast('Digite um número de patrimônio antes de adicionar.', 'warning');
+                    manualCodeInput.focus();
+                    return;
+                }
+                handleNewCodeDetected(code, true);
+                manualCodeInput.value = '';
+                manualCodeInput.focus();
+            });
+
+            // Filtro na lista
+            searchInput.addEventListener('input', renderInventory);
+
+            // Exportação e Limpeza
+            btnCopyList.addEventListener('click', copyListToClipboard);
+            btnExportCsv.addEventListener('click', exportToCsv);
+
+            btnClearList.addEventListener('click', () => {
+                if (inventoryItems.length === 0) {
+                    showToast('A lista já está vazia.', 'info');
+                    return;
+                }
+                clearCountText.textContent = inventoryItems.length;
+                clearConfirmModal.classList.remove('hidden');
+            });
+
+            btnCancelClear.addEventListener('click', () => {
+                clearConfirmModal.classList.add('hidden');
+            });
+
+            btnConfirmClear.addEventListener('click', () => {
+                inventoryItems = [];
+                saveToStorage();
+                renderInventory();
+                clearConfirmModal.classList.add('hidden');
+                showToast('Lista limpa com sucesso.', 'info');
+            });
+
+            // Modal de Duplicidade
+            btnDupIgnore.addEventListener('click', () => {
+                pendingDuplicateCode = null;
+                duplicateModal.classList.add('hidden');
+            });
+
+            btnDupAddAnyway.addEventListener('click', () => {
+                if (pendingDuplicateCode) {
+                    addItemToInventory(pendingDuplicateCode);
+                    pendingDuplicateCode = null;
+                }
+                duplicateModal.classList.add('hidden');
+            });
+
+            // Modal de Edição
+            btnCancelEdit.addEventListener('click', () => {
+                editItemModal.classList.add('hidden');
+            });
+
+            editItemForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = editItemId.value;
+                const item = inventoryItems.find(i => i.id === id);
+                if (item) {
+                    item.code = editItemCode.value.trim() || item.code;
+                    item.type = editItemType.value.trim() || 'Monitor';
+                    item.note = editItemNote.value.trim();
+                    saveToStorage();
+                    renderInventory();
+                    showToast('Item atualizado!', 'success');
+                }
+                editItemModal.classList.add('hidden');
+            });
+
+            // Inicializa dados salvos ao carregar a página
+            loadFromStorage();
+        });
+    </script>
+</body>
+</html>
